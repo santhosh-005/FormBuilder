@@ -1,6 +1,9 @@
 // Load environment variables FIRST
-const dotenv = require("dotenv");
-dotenv.config();
+try {
+  require("dotenv").config();
+} catch (error) {
+  console.log("dotenv not found, using environment variables from system");
+}
 
 const express = require("express");
 const mongoose = require("mongoose");
