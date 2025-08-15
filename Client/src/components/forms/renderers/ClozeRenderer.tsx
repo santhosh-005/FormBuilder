@@ -230,7 +230,7 @@ const ClozeRenderer: React.FC<ClozeRendererProps> = ({
             placeholder={blank.answerHint || 'drop here'}
             onDrop={handleDrop}
             onClear={handleClearBlank}
-            onDragOver={(e) => handleDragOver(blankId)}
+            onDragOver={() => handleDragOver(blankId)}
             isOver={dragOverBlank === blankId}
           />
         );
