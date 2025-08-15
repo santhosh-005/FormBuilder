@@ -358,10 +358,6 @@ const deleteForm = async (req, res) => {
 // Submit form (create submission)
 const submitForm = async (req, res) => {
   try {
-    if (!req.user?.uid) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
 
     const { id } = req.params;
     const { answers } = req.body;
@@ -388,7 +384,7 @@ const submitForm = async (req, res) => {
 
     const submission = new Submission({
       formId: id,
-      userId: req.user.uid,
+      userId: "",
       answers
     });
 

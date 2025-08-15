@@ -17,7 +17,8 @@ api.interceptors.request.use(
     // Skip auth for public endpoints only
     const isPublicEndpoint = (
       config.url === '/forms' || 
-      (config.url?.startsWith('/form/') && config.method?.toLowerCase() === 'get')
+      (config.url?.startsWith('/form/') && config.method?.toLowerCase() === 'get') ||
+      (config.url?.includes('/submissions') && config.method?.toLowerCase() === 'post')
     );
 
     if (!isPublicEndpoint) {

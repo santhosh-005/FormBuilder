@@ -30,8 +30,8 @@ router.put('/:id', firebaseAuth, updateForm);
 // DELETE /api/forms/:id - Delete a form (requires auth + ownership)
 router.delete('/:id', firebaseAuth, deleteForm);
 
-// POST /api/forms/:id/submissions - Submit a form (requires auth)
-router.post('/:id/submissions', firebaseAuth, submitForm);
+// POST /api/forms/:id/submissions - Submit a form (public - no auth required)
+router.post('/:id/submissions', submitForm);
 
 // GET /api/forms/:id/submissions - Get submissions for a form (requires auth)
 router.get('/:id/submissions', firebaseAuth, getFormSubmissions);

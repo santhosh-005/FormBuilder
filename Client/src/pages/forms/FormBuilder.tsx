@@ -95,6 +95,43 @@ const FormBuilder: React.FC = () => {
     }
   };
 
+  // Validation functions for each question type
+  const isQuestionValid = (question: CategorizeQuestion | ClozeQuestion | ComprehensionQuestion): boolean => {
+    switch (question.type) {
+      case 'categorize':
+        // Valid if has categories with content OR items with content
+        const hasValidCategories = question.categories.some(cat => cat.trim() !== '');
+        const hasValidItems = question.items.some(item => item.text.trim() !== '');
+        return hasValidCategories || hasValidItems;
+      case 'cloze':
+        // Valid if has text content OR configured blanks
+        return question.text.trim() !== '' || question.blanks.length > 0;
+      case 'comprehension':
+        // Valid if has passage content OR has questions
+        return question.passage.trim() !== '' || question.questions.length > 0;
+      default:
+        return false;
+    }
+  };
+
+  const removeInvalidQuestions = () => {
+    if (!form) return;
+    
+    const validQuestions = form.questions.filter(isQuestionValid);
+    
+    if (validQuestions.length !== form.questions.length) {
+      setForm({
+        ...form,
+        questions: validQuestions
+      });
+      
+      // Update active question if the current one was removed
+      if (activeQuestion !== null && activeQuestion >= validQuestions.length) {
+        setActiveQuestion(null);
+      }
+    }
+  };
+
   const addQuestion = (type: 'categorize' | 'cloze' | 'comprehension') => {
     if (!form) return;
 
@@ -154,9 +191,11 @@ const FormBuilder: React.FC = () => {
       questions: newQuestions
     });
     
+    // If we're deleting the currently active question, go back to overview
     if (activeQuestion === index) {
       setActiveQuestion(null);
     } else if (activeQuestion !== null && activeQuestion > index) {
+      // If we're deleting a question before the active one, adjust the index
       setActiveQuestion(activeQuestion - 1);
     }
   };
@@ -383,7 +422,10 @@ const FormBuilder: React.FC = () => {
                 <div className="border-b border-gray-200">
                   <nav className="-mb-px flex">
                     <button
-                      onClick={() => setActiveQuestion(null)}
+                      onClick={() => {
+                        removeInvalidQuestions();
+                        setActiveQuestion(null);
+                      }}
                       className={`py-4 px-6 text-sm font-medium rounded-t-xl transition-all duration-200 ${
                         activeQuestion === null
                           ? 'border-b-2 border-indigo-500 text-indigo-600 bg-indigo-50/50'
@@ -434,7 +476,10 @@ const FormBuilder: React.FC = () => {
                       
                       <div className="mt-6 pt-4 border-t border-gray-200">
                         <button
-                          onClick={() => setActiveQuestion(null)}
+                          onClick={() => {
+                            removeInvalidQuestions();
+                            setActiveQuestion(null);
+                          }}
                           className="px-4 py-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50/50 rounded-lg transition-all duration-200"
                         >
                           ← Back to Questions Overview

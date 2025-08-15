@@ -1,16 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  DndContext,
-  DragOverlay,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
-import { useDraggable, useDroppable } from '@dnd-kit/core';
 import type { CategorizeQuestion, CategorizeItem } from '../../../types/form';
 
 interface CategorizeRendererProps {
@@ -21,32 +9,58 @@ interface CategorizeRendererProps {
 
 interface DraggableItemProps {
   item: CategorizeItem;
-  isDragging?: boolean;
+  onDragStart: (item: CategorizeItem, e: React.DragEvent) => void;
+  isDragging: boolean;
 }
 
 interface DroppableCategoryProps {
   category: string;
   items: CategorizeItem[];
   onRemoveItem: (itemId: string) => void;
+  onDrop: (itemId: string, category: string) => void;
+  onDragOver: (e: React.DragEvent) => void;
+  isOver: boolean;
 }
 
-const DraggableItem: React.FC<DraggableItemProps> = ({ item, isDragging = false }) => {
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({
-    id: item.id,
-  });
+const DraggableItem: React.FC<DraggableItemProps> = ({ item, onDragStart, isDragging }) => {
+  const handleDragStart = (e: React.DragEvent) => {
+    // Create a custom drag image that's positioned correctly
+    const dragImage = e.currentTarget.cloneNode(true) as HTMLElement;
+    dragImage.style.transform = 'rotate(2deg)';
+    dragImage.style.opacity = '0.8';
+    dragImage.style.width = '150px'; // Fixed width
+    dragImage.style.minWidth = '150px';
+    dragImage.style.maxWidth = '150px';
+    dragImage.style.whiteSpace = 'nowrap';
+    dragImage.style.overflow = 'hidden';
+    dragImage.style.textOverflow = 'ellipsis';
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px'; // Hide it off-screen
+    dragImage.style.left = '-1000px';
+    dragImage.style.zIndex = '9999';
+    document.body.appendChild(dragImage);
+    
+    // Set the drag image with offset to cursor position
+    e.dataTransfer.setDragImage(dragImage, 75, 20); // Center horizontally (150/2)
+    
+    // Clean up the temporary element after a brief delay
+    setTimeout(() => {
+      if (document.body.contains(dragImage)) {
+        document.body.removeChild(dragImage);
+      }
+    }, 0);
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
+    onDragStart(item, e);
   };
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className="p-3 bg-blue-100 border border-blue-200 rounded-lg cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-shadow"
+      draggable
+      onDragStart={handleDragStart}
+      className={`p-3 bg-blue-100 border border-blue-200 rounded-lg cursor-grab shadow-sm hover:shadow-md transition-all duration-200 ${
+        isDragging ? 'opacity-50 scale-95' : 'hover:scale-105'
+      }`}
+      style={{ userSelect: 'none' }}
     >
       <span className="text-sm font-medium text-blue-900">{item.text}</span>
     </div>
@@ -56,18 +70,30 @@ const DraggableItem: React.FC<DraggableItemProps> = ({ item, isDragging = false 
 const DroppableCategory: React.FC<DroppableCategoryProps> = ({ 
   category, 
   items, 
-  onRemoveItem 
+  onRemoveItem,
+  onDrop,
+  onDragOver,
+  isOver
 }) => {
-  const { isOver, setNodeRef } = useDroppable({
-    id: category,
-  });
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData('text/plain');
+    onDrop(itemId, category);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    onDragOver(e);
+  };
 
   return (
     <div
-      ref={setNodeRef}
-      className={`p-4 border-2 border-dashed rounded-lg min-h-32 transition-colors ${
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragEnter={(e) => e.preventDefault()}
+      className={`p-4 border-2 border-dashed rounded-lg min-h-32 transition-all duration-200 ${
         isOver 
-          ? 'border-blue-400 bg-blue-50' 
+          ? 'border-blue-400 bg-blue-50 scale-[1.02]' 
           : 'border-gray-300 bg-gray-50'
       }`}
     >
@@ -76,19 +102,20 @@ const DroppableCategory: React.FC<DroppableCategoryProps> = ({
         {items.map((item) => (
           <div
             key={item.id}
-            className="p-2 bg-white border border-gray-200 rounded flex items-center justify-between"
+            className="p-2 bg-white border border-gray-200 rounded flex items-center justify-between shadow-sm"
           >
             <span className="text-sm">{item.text}</span>
             <button
               onClick={() => onRemoveItem(item.id)}
-              className="text-gray-400 hover:text-red-600 text-sm"
+              className="text-gray-400 hover:text-red-600 text-lg font-bold leading-none transition-colors duration-200 hover:scale-110"
+              title="Remove item"
             >
               ×
             </button>
           </div>
         ))}
         {items.length === 0 && (
-          <p className="text-gray-400 text-sm text-center py-4">
+          <p className="text-gray-400 text-sm text-center py-6">
             Drop items here
           </p>
         )}
@@ -103,7 +130,8 @@ const CategorizeRenderer: React.FC<CategorizeRendererProps> = ({
   initialAnswer = {},
 }) => {
   const [itemPlacements, setItemPlacements] = useState<{ [itemId: string]: string }>(initialAnswer);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
   const prevInitialAnswerRef = useRef<{ [itemId: string]: string }>(initialAnswer);
 
   // Update itemPlacements when initialAnswer changes (for reset functionality)
@@ -111,44 +139,31 @@ const CategorizeRenderer: React.FC<CategorizeRendererProps> = ({
     if (JSON.stringify(initialAnswer) !== JSON.stringify(prevInitialAnswerRef.current)) {
       setItemPlacements(initialAnswer);
       prevInitialAnswerRef.current = initialAnswer;
-      // Do NOT call onAnswer here to avoid infinite parent updates
     }
   }, [initialAnswer]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
+  const handleDragStart = (item: CategorizeItem, e: React.DragEvent) => {
+    setDraggedItemId(item.id);
+    e.dataTransfer.setData('text/plain', item.id);
+    e.dataTransfer.effectAllowed = 'move';
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (over && active.id !== over.id) {
-      const itemId = active.id as string;
-      const categoryId = over.id as string;
-      
-      const newPlacements = { ...itemPlacements };
-      
-      // If item was in a category, remove it
-      Object.keys(newPlacements).forEach(key => {
-        if (newPlacements[key] === categoryId && key !== itemId) {
-          // Keep existing items in the category
-        }
-      });
-      
-      newPlacements[itemId] = categoryId;
-      setItemPlacements(newPlacements);
-      onAnswer(newPlacements);
-    }
-    
-    setActiveId(null);
+  const handleDragEnd = () => {
+    setDraggedItemId(null);
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = (itemId: string, category: string) => {
+    const newPlacements = { ...itemPlacements };
+    newPlacements[itemId] = category;
+    setItemPlacements(newPlacements);
+    onAnswer(newPlacements);
+    setDraggedItemId(null);
+    setDragOverCategory(null);
+  };
+
+  const handleDragOver = (category: string) => {
+    setDragOverCategory(category);
   };
 
   const handleRemoveItem = (itemId: string) => {
@@ -166,62 +181,57 @@ const CategorizeRenderer: React.FC<CategorizeRendererProps> = ({
     return question.items.filter(item => itemPlacements[item.id] === category);
   };
 
-  const activeItem = activeId ? question.items.find(item => item.id === activeId) : null;
-
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="space-y-6">
-        {/* Question Image */}
-        {question.imageUrl && (
-          <div className="text-center">
-            <img
-              src={question.imageUrl}
-              alt="Question illustration"
-              className="max-w-full h-auto max-h-64 mx-auto rounded-lg shadow-sm"
+    <div className="space-y-6" onDragEnd={handleDragEnd}>
+      {/* Question Image */}
+      {question.imageUrl && (
+        <div className="text-center">
+          <img
+            src={question.imageUrl}
+            alt="Question illustration"
+            className="max-w-full h-auto max-h-64 mx-auto rounded-lg shadow-sm"
+          />
+        </div>
+      )}
+
+      {/* Unplaced Items */}
+      <div>
+        <h3 className="font-medium text-gray-700 mb-3">Items to Categorize</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {getUnplacedItems().map((item) => (
+            <DraggableItem 
+              key={item.id} 
+              item={item} 
+              onDragStart={handleDragStart}
+              isDragging={draggedItemId === item.id}
             />
+          ))}
+        </div>
+        {getUnplacedItems().length === 0 && (
+          <div className="text-gray-400 text-sm text-center py-6 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
+            🎉 All items have been categorized
           </div>
         )}
-
-        {/* Unplaced Items */}
-        <div>
-          <h3 className="font-medium text-gray-700 mb-3">Items to Categorize</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {getUnplacedItems().map((item) => (
-              <DraggableItem key={item.id} item={item} />
-            ))}
-          </div>
-          {getUnplacedItems().length === 0 && (
-            <p className="text-gray-400 text-sm text-center py-4 border-2 border-dashed border-gray-200 rounded-lg">
-              All items have been categorized
-            </p>
-          )}
-        </div>
-
-        {/* Categories */}
-        <div>
-          <h3 className="font-medium text-gray-700 mb-3">Categories</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {question.categories.map((category) => (
-              <DroppableCategory
-                key={category}
-                category={category}
-                items={getItemsInCategory(category)}
-                onRemoveItem={handleRemoveItem}
-              />
-            ))}
-          </div>
-        </div>
       </div>
 
-      <DragOverlay>
-        {activeItem ? <DraggableItem item={activeItem} isDragging /> : null}
-      </DragOverlay>
-    </DndContext>
+      {/* Categories */}
+      <div>
+        <h3 className="font-medium text-gray-700 mb-3">Categories</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {question.categories.map((category) => (
+            <DroppableCategory
+              key={category}
+              category={category}
+              items={getItemsInCategory(category)}
+              onRemoveItem={handleRemoveItem}
+              onDrop={handleDrop}
+              onDragOver={() => handleDragOver(category)}
+              isOver={dragOverCategory === category}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 };
 
